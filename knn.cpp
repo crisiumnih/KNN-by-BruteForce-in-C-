@@ -3,6 +3,9 @@
 #include <vector>
 #include <fstream>
 #include <algorithm>
+#include <random>
+#include <ctime>
+#include <cstdlib>
 #include <sstream>
 #include <map>
 using namespace std;
@@ -16,7 +19,7 @@ struct DataPoint
 
 double distformula(const vector<double> &v, const vector<double> &b)
 {
-  double dist = 0;
+  double dist = 0.00f;
   for (size_t i = 0; i < v.size(); i++)
   {
     dist += pow(v[i] - b[i], 2);
@@ -40,25 +43,32 @@ class KNN
 {
 private:
   vector<DataPoint> data;
+  vector<DataPoint> trainingdata;
+  vector<DataPoint> testingdata;
   vector<double> mini ;
   vector<double> maxi;
 
 public:
   
-  void reCSV(const string &filename)
+  void reCSV(const string &filename, double trainpercentage)
   {
     ifstream file(filename);
     string line;
     getline(file, line);
-    mini.resize(2, numeric_limits<double>::max());
-    maxi.resize(2, numeric_limits<double>::min());
-
+    mini.resize(2, numeric_limits<double>::min());
+    maxi.resize(2, numeric_limits<double>::max());
+    random_device rd;
+    mt19937 g(rd());
+    srand(time(0));
     while (getline(file, line))
     {
       stringstream ss(line);
       DataPoint dp;
       string value;
       int col = 0;
+
+      
+      
 
       while (getline(ss, value, ','))
       {
@@ -71,11 +81,14 @@ public:
             maxi[col - 1] = max(maxi[col - 1], stod(value));
             mini[col - 1] = min(mini[col - 1], stod(value));
             dp.features1.push_back(stod(value));
+            
             }
+
           else if (col ==2 ){
             maxi[col - 1] = max(maxi[col - 1], stod(value));
             mini[col - 1] = min(mini[col - 1], stod(value));
             dp.features2.push_back(stod(value));
+            //cout<<value<<"       "<<stod(value)<<endl;
             }
           else if (col == 5)
             dp.label = value;
@@ -83,8 +96,35 @@ public:
         col++;
       }
       data.push_back(dp);
+      
     }
-    for (auto &dp : data)
+    //for (auto &dp : data){
+      //cout<<dp.features1[1]<<endl;
+    //}
+    cout<<"Before shuffle: ";
+    for (int i=0; i<5; ++i) {
+    cout<<i+1<<". "<<data[i].features1[0]<<" "<<" |";
+    }
+    cout<<endl;
+    shuffle(data.begin() + 1, data.end(),g);
+
+    cout<<"After shuffle: ";
+    for (int i=0; i<5; ++i) {
+    cout<<i+1<<". "<<data[i].features2[0]<<" "<<" |";
+    }
+    cout<<endl;
+
+    size_t splitindex = static_cast<size_t>(data.size()*trainpercentage);
+    trainingdata.assign(data.begin(), data.begin()+splitindex);
+    testingdata.assign(data.begin()+splitindex,data.end());
+    for (auto &dp : trainingdata)
+    {
+      dp.features1 = normalization(dp.features1, mini[0], maxi[0]);
+      dp.features2 = normalization(dp.features2, mini[1], maxi[1]);
+      // dp.features = normalization(dp.features, mini[2],maxi[2]);
+      // dp.features = normalization(dp.features, mini[3],maxi[3]);
+    }
+    for (auto &dp : testingdata)
     {
       dp.features1 = normalization(dp.features1, mini[0], maxi[0]);
       dp.features2 = normalization(dp.features2, mini[1], maxi[1]);
@@ -97,10 +137,11 @@ public:
   double getmini(int index) { return mini[index]; }
   double getmaxi(int index) { return maxi[index]; }
 
-  string algot(const DataPoint &stuf, int k)
+
+  string trainmodel(const DataPoint &stuf, int k)
   {
     vector<pair<double, string>> dist;
-    for (const auto &dp : data)
+    for (const auto &dp : trainingdata)
     {
       double sqdist1 = distformula(stuf.features1, dp.features1);
       double sqdist2 = distformula(stuf.features2, dp.features2);
@@ -128,22 +169,43 @@ public:
 
     return pred;
   }
+
+  void testModel(int k){
+    int correct =0;
+    for(const auto &dp: testingdata){
+      string pred = trainmodel(dp,k);
+      if(pred == dp.label){
+        correct++;
+      }
+      
+    }
+    double accuracy = static_cast<double>(correct)/testingdata.size();
+    cout<<"Accuracy on test: "<<accuracy<<endl;
+  }
+
+  vector<DataPoint> &gettrainingdata(){
+    return trainingdata;
+  }
+  vector<DataPoint> &gettestingdata(){
+    return testingdata;
+  }
 };
 
 int main()
 {
 
   KNN knn;
-  knn.reCSV("Iris.csv");
+  knn.reCSV("Iris.csv",0.6);
   DataPoint stuf;
-  stuf.features1 = {5.1};
-  stuf.features2 = {3.5};
-
+  vector<DataPoint> testingData = knn.gettestingdata();
+  stuf = testingData[1];
   stuf.features1 = normalization(stuf.features1, knn.getmini(0), knn.getmaxi(0));
   stuf.features2 = normalization(stuf.features2, knn.getmini(1), knn.getmaxi(1));
 
-  string prediction = knn.algot(stuf, 3);
+  string prediction = knn.trainmodel(stuf, 3);
   cout << "Predicted Species: " << prediction << endl;
+
+  knn.testModel(3);
 
   return 0;
 }
